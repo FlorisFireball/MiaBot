@@ -11,7 +11,6 @@ import signal # save files when receiving KeyboardInterrupt
 import sys # exit program after Keyboardinterrupt signal is notices
 import threading # for running clockQuestionEvent(); a function to say the Question of the Day, every day at a certain time.
 
-
 import requests #for sending a custom thread creation request
 async def create_thread(self,name,auto_archive_duration,message):
     print("Creating thread...")
@@ -34,13 +33,13 @@ client =  commands.AutoShardedBot(shard_count=2,shard_id=1, intents = intents
 , command_prefix=commands.when_mentioned_or("/"), case_insensitive=True
 , activity = discord.Game(name="with slash (/) commands!"))
 slash = SlashCommand(client, sync_commands=True)
-#   path = ""   #"C:Users\\[........]\\MiaBot\\version 0.1.1\\"
+path = ""   #"C:Users\\[........]\\MiaBot\\version 0.1.1\\"
 
 #default defining before settings
 astronomyWords = []
 settings = {}
 qotds = []
-qotdChannel = 0
+qotdEmbed = 0
 defaultSettings = {
     'msgCount':0,
     'limit':20,
@@ -51,8 +50,8 @@ defaultSettings = {
 
 @client.event
 async def on_ready():
-    global astronomyWords, settings, qotds, qotdChannel
-    # await thread.join() # Todo:
+    global astronomyWords, settings, qotds
+    #try to join #MiaBot channel
     print("Logged in as {0.user}".format(client,end="   "))
     #load astronomyWords [] file, split the string at every comma and ensure that it follows the correct format
     # space,astronomy,saturn,jupiter,antenna,satellite,radio,telescope
@@ -66,11 +65,11 @@ async def on_ready():
         settings = json.loads(open('settings.json',"r").read())
     if len(qotds) == 0:
         qotds = json.loads(open('qotds.json',"r").read())
-    qotdChannel = client.get_channel(939488789984841738)
+
 
 @client.event
 async def on_message(message):
-    global settings
+    global settings, qotdEmbed, qotds
     try: #check if a user has a nickname: yes? use that for the print log statements
         userName = message.author.nick
         if userName == None:
@@ -93,6 +92,14 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    if qotdEmbed != 0: #Say message if time has passed
+    #939488789984841738
+        print("sending...")
+        await client.get_channel(829356293206310926).send("<@&934862221165617250>",embed=qotdEmbed)
+        print("sent!")
+        qotdEmbed = 0
+        del qotds[0]
+
     #some custom commands
     if message.content.startswith(":say "):
         await message.channel.send(message.content.split(" ",1)[1].replace("[[del]]",""),delete_after=64)
@@ -100,8 +107,6 @@ async def on_message(message):
     if message.content.startswith(":kill"): #kill switch if ever something goes wrong and I'm not online to help
         await message.add_reaction("💀")
         signal_handler(None,None)
-        await client.logout()
-        await client.close()
     if "\s" in message.content.lower():
         sendable = False
         if not ((message.content.startswith("$") and message.content.startswith("$")) or message.startswith(",text")):
@@ -231,6 +236,9 @@ async def on_raw_reaction_add(reaction):
     #delete message if bot message is reacted to with ':x:'
     if reaction.emoji.name == '❌':
         if message.author == client.user:
+            if message.content.startswith("<@!"):
+                if not int(message.content.split(" ",1)[0][3:21]) == reaction.user_id or reaction.user_id == 262913789375021056:
+                    return
             await message.delete()
 
 @slash.slash(name="addword",description="Add a new word to the list of astronomy words. (seperate with commas)")
@@ -417,7 +425,7 @@ async def checkword(ctx, words):
                 components[0]["components"][0]["style"] = 3 #add
                 components[0]["components"][1]["style"] = 4 #nevermind
                 await msg.edit(components=components)
-            except asyncio.TimeoutError: #todo1ho
+            except asyncio.TimeoutError: #todo1
                 components[0]["components"][0]["disabled"] = True
                 components[0]["components"][1]["disabled"] = True
                 components[0]["components"][0]["style"] = 2 #give both gray color
@@ -469,7 +477,7 @@ async def addReaction(ctx, msg_id, emote):
     else:
         await ctx.send("Only staff can run this command!", hidden=True)
 
-@slash.slash(name='addquestion', description="Add a question to the queue") #todo:
+@slash.slash(name='addquestion', description="Add a question to the queue")
 async def addQuestion(ctx, question):
     role = discord.utils.find(lambda r: r.name == 'Mod', ctx.guild.roles)
     if ctx.author.id == 262913789375021056 or role in ctx.author.roles:
@@ -479,7 +487,8 @@ async def addQuestion(ctx, question):
         await ctx.send("Only staff can run this command!", hidden=True)
 
 @slash.slash(name='questionlist', description="Get the current question queue")
-async def questionlist(ctx, hide):
+async def questionlist(ctx, hide_file_from_others___yes_no = 'True'):
+    hide = hide_file_from_others___yes_no
     role = discord.utils.find(lambda r: r.name == 'Mod', ctx.guild.roles)
     if ctx.author.id == 262913789375021056 or role in ctx.author.roles:
         if hide.lower() in "true,yes,yeh,ye,yah,yeah,sure,ok,okay,hidden,hide,secret,1".split(","):
@@ -511,30 +520,56 @@ async def removeQuestion(ctx,index):
         await ctx.send("Only staff can run this command!", hidden=True)
 
 timer = 0
-def clockQuestionEvent( ):
-    global timer
+def clockQuestionEvent():
+    global timer, qotdEmbed
     # This function runs periodically every 60 second
     timer = threading.Timer(60, clockQuestionEvent)
     timer.start()
     now = datetime.now()
     current_time = now.strftime("%H:%M")
-    print("Current Time =", current_time)
-    if(current_time == "16:05"):  # check if matches with the desired time
-        global qotds
-        desc = qotds[0]
-        # color = int(color,16)
-        embedVar = discord.Embed(content="<@&939506306358841414>",title="❓❔ Question of the Day ❔❓", description=desc, color=0x00ffff)
-        embedVar.set_footer(text="Astronomy Club")
-
-        async def send(embed):
-            await qotdChannel.send(embed=embed)
+    if current_time in ["13:59","14:00","14:01"]:
+        print("Current Time =", current_time)
+    if current_time == "14:00":  # check if matches with the desired time
+        try:
+            desc = qotds[0]
+        except:
+            print("Couldn't set new question: there are none, or the list isn't loaded in correctly.")
             return
-        loop = asyncio.get_event_loop()
-        loop.create_task(aioredis.create_redis('redis://localhost:6379'))
-        c = loop.run_until_complete(send(embedVar))
+        # color = int(color,16)
+        embedVar = discord.Embed(title="❓❔ Question of the Day ❔❓", description=desc, color=0x00ffff)
+        embedVar.set_footer(text="Astronomy Club      ("+str(len(qotds))+" queued)")
+        qotdEmbed = embedVar
 
-        qotdChannel.send(embed=embedVar)
-        del qotds[0]
+        none_of_this_workedTwT = {
+        # qotdChannel.send(embed=embedVar)
+
+        # async def send(embed):
+        #     await qotdChannel.send(embed=embed)
+        # try:
+        #     loop = asyncio.get_event_loop()
+        # except RuntimeError:
+        #     loop = asyncio.new_event_loop()
+        #     asyncio.set_event_loop(loop)
+        # loop = asyncio.get_event_loop()
+        # try:
+        #     loop.run_until_complete(send())
+        # finally:
+        #     loop.run_until_complete(loop.shutdown_asyncgens())
+        #     loop.close()
+        # submit the coroutine to the event loop thread
+        # send_fut = asyncio.run_coroutine_threadsafe(send(embedVar), client_loop)
+        # wait for the coroutine to finish
+        # send_fut.result()
+        # loop.run_until_complete(send(embedVar))
+        # loop.close()
+    # await qotdChannel.send(embed=embedVar)})();
+        # loop = asyncio.get_event_loop()
+        # loop.create_task(send)
+        # asyncio.run(send(embedVar))
+        # loop = asyncio.get_event_loop()
+        # loop.create_task(aioredis.create_redis('redis://localhost:6379'))
+        # c = loop.run_until_complete(send(embedVar))
+        }
 clockQuestionEvent()
 
 def signal_handler(signal, frame):
@@ -574,5 +609,5 @@ signal.signal(signal.SIGINT, signal_handler) #notice KeyboardInterrupt, and run 
 
 
 client.run( #token v2
-    'OTM3Mzc1MTM4Nzk2NjkxNDU2.Yfa0oA.KFdiLWpNJze7FeOYl-XlqVxlFOU'
+    open('token.txt',"r").read()
 )
